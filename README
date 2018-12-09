@@ -1,5 +1,5 @@
-Veusz 3.0
----------
+Veusz 3.0.1
+-----------
 https://veusz.github.io
 
 Veusz is a 2D and 3D scientific plotting package.  It is designed to
@@ -11,6 +11,20 @@ Veusz provides GUI, Python module, command line, scripting, DBUS and
 SAMP interfaces to its plotting facilities. It also allows for
 manipulation and editing of datasets. Data can be captured from
 external sources such as Internet sockets or other programs.
+
+Changes in 3.0.1:
+ * Change in build system to use qmake to find Qt locations. This is to fix
+   the build inside Anaconda. Also Qt and sip parameters can now be given
+   as environment variables.
+ * Fix problem when picking points with too many non-finite values
+ * Change default SVG export DPI to 96 to match inkscape and provide
+   option in dialog to choose export DPI
+ * Allow %PAGE% and %PAGENAME% in export filename for single page output
+ * Fix failing fitting due to iminuit differences
+ * Fix crash if both ends of part of broken axis widget are the same for
+   EMF exporting
+ * Update to Qt 5.11.1 and update PyQt and sip in Windows binary
+ * Build Mac and Linux binaries with EMF export
 
 Changes in 3.0:
  * New 3D support for plotting points, functions, surfaces and volumes

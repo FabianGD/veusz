@@ -184,7 +184,7 @@ class Export(object):
 
     def __init__(self, doc, filename, pagenumbers, color=True, bitmapdpi=100,
                  antialias=True, quality=85, backcolor='#ffffff00',
-                 pdfdpi=150, svgtextastext=False):
+                 pdfdpi=150, svgdpi=96, svgtextastext=False):
         """Initialise export class. Parameters are:
         doc: document to write
         filename: output filename
@@ -195,6 +195,7 @@ class Export(object):
         quality: compression factor for bitmaps
         backcolor: background color default for bitmaps (default transparent).
         pdfdpi: dpi for pdf and eps files
+        svgdpi: dpi for svg files
         svgtextastext: write text in SVG as text, rather than curves
         """
 
@@ -207,6 +208,7 @@ class Export(object):
         self.quality = quality
         self.backcolor = backcolor
         self.pdfdpi = pdfdpi
+        self.svgdpi = svgdpi
         self.svgtextastext = svgtextastext
 
     def export(self):
@@ -387,27 +389,30 @@ class Export(object):
 
         page = self.getSinglePage()
 
-        dpi = svg_export.dpi * 1.
+        scale = 0.1
+        sdpi = self.svgdpi/scale
         size = self.doc.pageSize(
-            page, dpi=(dpi,dpi), integer=False)
+            page, dpi=(sdpi,sdpi), integer=False)
         with codecs.open(filename, 'w', 'utf-8') as f:
             paintdev = svg_export.SVGPaintDevice(
-                f, size[0]/dpi, size[1]/dpi, writetextastext=self.svgtextastext)
+                f, size[0]/sdpi, size[1]/sdpi,
+                writetextastext=self.svgtextastext,
+                dpi=self.svgdpi, scale=scale)
             painter = painthelper.DirectPainter(paintdev)
-            self.renderPage(page, size, (dpi,dpi), painter)
+            self.renderPage(page, size, (sdpi,sdpi), painter)
 
     def exportSelfTest(self, filename):
         """Export document for testing"""
 
         page = self.getSinglePage()
 
-        dpi = svg_export.dpi * 1.
+        dpi = 90
         size = width, height = self.doc.pageSize(
             page, dpi=(dpi,dpi), integer=False)
 
         with open(filename, 'w') as fout:
             paintdev = selftest_export.SelfTestPaintDevice(
-                fout, width/dpi, height/dpi)
+                fout, width/dpi, height/dpi, dpi=dpi)
             painter = painthelper.DirectPainter(paintdev)
             self.renderPage(page, size, (dpi,dpi), painter)
 

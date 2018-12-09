@@ -23,13 +23,9 @@ from __future__ import division, print_function
 import re
 
 from ..compat import crange, cbytes
-from .. import qtall as qt4
+from .. import qtall as qt
 
-# dpi runs at many times usual, and results are scaled down
-# helps fix point issues in font sizes
-dpi = 900.
-scale = 0.1
-
+# physical sizes
 inch_mm = 25.4
 inch_pt = 72.0
 
@@ -67,7 +63,7 @@ def escapeXML(text):
     text = text.replace(u'\ue001', '&amp;')
     return text
 
-def createPath(path):
+def createPath(path, scale):
     """Convert qt path to svg path.
 
     We use relative coordinates to make the file size smaller and help
@@ -80,13 +76,13 @@ def createPath(path):
     while i < count:
         e = path.elementAt(i)
         nx, ny = e.x*scale, e.y*scale
-        if e.type == qt4.QPainterPath.MoveToElement:
+        if e.type == qt.QPainterPath.MoveToElement:
             p.append( 'm%s,%s' % (fltStr(nx-ox), fltStr(ny-oy)) )
             ox, oy = nx, ny
-        elif e.type == qt4.QPainterPath.LineToElement:
+        elif e.type == qt.QPainterPath.LineToElement:
             p.append( 'l%s,%s' % (fltStr(nx-ox), fltStr(ny-oy)) )
             ox, oy = nx, ny
-        elif e.type == qt4.QPainterPath.CurveToElement:
+        elif e.type == qt.QPainterPath.CurveToElement:
             e1 = path.elementAt(i+1)
             e2 = path.elementAt(i+2)
             p.append( 'c%s,%s,%s,%s,%s,%s' % (
@@ -139,24 +135,19 @@ class SVGElement(object):
             # simple close tag if not children or text
             fileobj.write('/>\n')
 
-class SVGPaintEngine(qt4.QPaintEngine):
+class SVGPaintEngine(qt.QPaintEngine):
     """Paint engine class for writing to svg files."""
 
-    def __init__(self, width_in, height_in, writetextastext=False):
-        """Create the class, using width and height as size of canvas
-        in inches."""
-
-        qt4.QPaintEngine.__init__(self,
-                                  qt4.QPaintEngine.Antialiasing |
-                                  qt4.QPaintEngine.PainterPaths |
-                                  qt4.QPaintEngine.PrimitiveTransform |
-                                  qt4.QPaintEngine.PaintOutsidePaintEvent |
-                                  qt4.QPaintEngine.PixmapTransform |
-                                  qt4.QPaintEngine.AlphaBlend
-                                  )
-
-        self.width = width_in
-        self.height = height_in
+    def __init__(self, writetextastext=False):
+        qt.QPaintEngine.__init__(
+            self,
+            qt.QPaintEngine.Antialiasing |
+            qt.QPaintEngine.PainterPaths |
+            qt.QPaintEngine.PrimitiveTransform |
+            qt.QPaintEngine.PaintOutsidePaintEvent |
+            qt.QPaintEngine.PixmapTransform |
+            qt.QPaintEngine.AlphaBlend
+        )
 
         self.imageformat = 'png'
         self.writetextastext = writetextastext
@@ -164,21 +155,24 @@ class SVGPaintEngine(qt4.QPaintEngine):
     def begin(self, paintdevice):
         """Start painting."""
         self.device = paintdevice
+        self.scale = paintdevice.scale
 
-        self.pen = qt4.QPen()
-        self.brush = qt4.QBrush()
+        self.pen = qt.QPen()
+        self.brush = qt.QBrush()
         self.clippath = None
         self.clipnum = 0
         self.existingclips = {}
-        self.transform = qt4.QTransform()
+        self.transform = qt.QTransform()
 
         # svg root element for qt defaults
         self.rootelement = SVGElement(
             None, 'svg',
             ('width="%spx" height="%spx" version="1.1"\n'
              '    xmlns="http://www.w3.org/2000/svg"\n'
-             '    xmlns:xlink="http://www.w3.org/1999/xlink"') %
-            (fltStr(self.width*dpi*scale), fltStr(self.height*dpi*scale)))
+             '    xmlns:xlink="http://www.w3.org/1999/xlink"') % (
+                 fltStr(self.device.width*self.device.sdpi*self.scale),
+                 fltStr(self.device.height*self.device.sdpi*self.scale))
+        )
         SVGElement(self.rootelement, 'desc', '', 'Veusz output document')
 
         # definitions, for clips, etc.
@@ -246,13 +240,13 @@ class SVGPaintEngine(qt4.QPaintEngine):
 
         clippath = self.transform.map(clippath)
 
-        if clipoperation == qt4.Qt.NoClip:
+        if clipoperation == qt.Qt.NoClip:
             self.clippath = None
-        elif clipoperation == qt4.Qt.ReplaceClip:
+        elif clipoperation == qt.Qt.ReplaceClip:
             self.clippath = clippath
-        elif clipoperation == qt4.Qt.IntersectClip:
+        elif clipoperation == qt.Qt.IntersectClip:
             self.clippath = self.clippath.intersected(clippath)
-        elif clipoperation == qt4.Qt.UniteClip:
+        elif clipoperation == qt.Qt.UniteClip:
             self.clippath = self.clippath.united(clippath)
         else:
             assert False
@@ -263,20 +257,20 @@ class SVGPaintEngine(qt4.QPaintEngine):
 
         # state is a list of transform, stroke/fill and clip states
         statevec = list(self.oldstate)
-        if ss & qt4.QPaintEngine.DirtyTransform:
+        if ss & qt.QPaintEngine.DirtyTransform:
             self.transform = state.transform()
             statevec[0] = self.transformState()
-        if ss & qt4.QPaintEngine.DirtyPen:
+        if ss & qt.QPaintEngine.DirtyPen:
             self.pen = state.pen()
             statevec[1] = self.strokeFillState()
-        if ss & qt4.QPaintEngine.DirtyBrush:
+        if ss & qt.QPaintEngine.DirtyBrush:
             self.brush = state.brush()
             statevec[1] = self.strokeFillState()
-        if ss & qt4.QPaintEngine.DirtyClipPath:
+        if ss & qt.QPaintEngine.DirtyClipPath:
             self._updateClipPath(state.clipPath(), state.clipOperation())
             statevec[2] = self.clipState()
-        if ss & qt4.QPaintEngine.DirtyClipRegion:
-            path = qt4.QPainterPath()
+        if ss & qt.QPaintEngine.DirtyClipRegion:
+            path = qt.QPainterPath()
             path.addRegion(state.clipRegion())
             self._updateClipPath(path, state.clipOperation())
             statevec[2] = self.clipState()
@@ -307,7 +301,7 @@ class SVGPaintEngine(qt4.QPaintEngine):
         if self.clippath is None:
             return ()
 
-        path = createPath(self.clippath)
+        path = createPath(self.clippath, self.scale)
 
         if path in self.existingclips:
             url = 'url(#c%i)' % self.existingclips[path]
@@ -334,38 +328,38 @@ class SVGPaintEngine(qt4.QPaintEngine):
         if p.color().alphaF() != 1.:
             vals['stroke-opacity'] = '%.3g' % p.color().alphaF()
         # - join style
-        if p.joinStyle() != qt4.Qt.BevelJoin:
+        if p.joinStyle() != qt.Qt.BevelJoin:
             vals['stroke-linejoin'] = {
-                qt4.Qt.MiterJoin: 'miter',
-                qt4.Qt.SvgMiterJoin: 'miter',
-                qt4.Qt.RoundJoin: 'round',
-                qt4.Qt.BevelJoin: 'bevel'
+                qt.Qt.MiterJoin: 'miter',
+                qt.Qt.SvgMiterJoin: 'miter',
+                qt.Qt.RoundJoin: 'round',
+                qt.Qt.BevelJoin: 'bevel'
                 }[p.joinStyle()]
         # - cap style
-        if p.capStyle() != qt4.Qt.SquareCap:
+        if p.capStyle() != qt.Qt.SquareCap:
             vals['stroke-linecap'] = {
-                qt4.Qt.FlatCap: 'butt',
-                qt4.Qt.SquareCap: 'square',
-                qt4.Qt.RoundCap: 'round'
+                qt.Qt.FlatCap: 'butt',
+                qt.Qt.SquareCap: 'square',
+                qt.Qt.RoundCap: 'round'
                 }[p.capStyle()]
         # - width
         w = p.widthF()
         # width 0 is device width for qt
         if w == 0.:
-            w = 1./scale
-        vals['stroke-width'] = fltStr(w*scale)
+            w = 1./self.scale
+        vals['stroke-width'] = fltStr(w*self.scale)
 
         # - line style
-        if p.style() == qt4.Qt.NoPen:
+        if p.style() == qt.Qt.NoPen:
             vals['stroke'] = 'none'
-        elif p.style() not in (qt4.Qt.SolidLine, qt4.Qt.NoPen):
+        elif p.style() not in (qt.Qt.SolidLine, qt.Qt.NoPen):
             # convert from pen width fractions to pts
-            nums = [fltStr(scale*w*x) for x in p.dashPattern()]
+            nums = [fltStr(self.scale*w*x) for x in p.dashPattern()]
             vals['stroke-dasharray'] = ','.join(nums)
 
         # BRUSH STYLES
         b = self.brush
-        if b.style() == qt4.Qt.NoBrush:
+        if b.style() == qt.Qt.NoBrush:
             vals['fill'] = 'none'
         else:
             vals['fill'] = b.color().name()
@@ -381,22 +375,22 @@ class SVGPaintEngine(qt4.QPaintEngine):
             dx, dy = m.dx(), m.dy()
             if (m.m11(), m.m12(), m.m21(), m.m22()) == (1., 0., 0., 1):
                 out = ('transform="translate(%s,%s)"' % (
-                        fltStr(dx*scale), fltStr(dy*scale)) ,)
+                        fltStr(dx*self.scale), fltStr(dy*self.scale)) ,)
             else:
                 out = ('transform="matrix(%s %s %s %s %s %s)"' % (
                         fltStr(m.m11(), 4), fltStr(m.m12(), 4),
                         fltStr(m.m21(), 4), fltStr(m.m22(), 4),
-                        fltStr(dx*scale), fltStr(dy*scale) ),)
+                        fltStr(dx*self.scale), fltStr(dy*self.scale) ),)
         else:
             out = ()
         return out
 
     def drawPath(self, path):
         """Draw a path on the output."""
-        p = createPath(path)
+        p = createPath(path, self.scale)
 
         attrb = 'd="%s"' % p
-        if path.fillRule() == qt4.Qt.WindingFill:
+        if path.fillRule() == qt.Qt.WindingFill:
             attrb += ' fill-rule="nonzero"'
 
         if attrb in self.pathcache:
@@ -431,9 +425,9 @@ class SVGPaintEngine(qt4.QPaintEngine):
             # size
             f = textitem.font()
             if f.pixelSize() > 0:
-                size = f.pixelSize()*scale
+                size = f.pixelSize()*self.scale
             else:
-                size = f.pointSizeF()*scale*dpi/inch_pt
+                size = f.pointSizeF()*self.scale*self.device.sdpi/inch_pt
 
             font = textitem.font()
             grpattrb = [
@@ -455,9 +449,9 @@ class SVGPaintEngine(qt4.QPaintEngine):
             text = escapeXML( textitem.text() )
 
             textattrb = [
-                'x="%s"' % fltStr(pt.x()*scale),
-                'y="%s"' % fltStr(pt.y()*scale),
-                'textLength="%s"' % fltStr(textitem.width()*scale),
+                'x="%s"' % fltStr(pt.x()*self.scale),
+                'y="%s"' % fltStr(pt.y()*self.scale),
+                'textLength="%s"' % fltStr(textitem.width()*self.scale),
                 ]
 
             # spaces get lost without this
@@ -472,9 +466,9 @@ class SVGPaintEngine(qt4.QPaintEngine):
 
         else:
             # convert to a path
-            path = qt4.QPainterPath()
+            path = qt.QPainterPath()
             path.addText(pt, textitem.font(), textitem.text())
-            p = createPath(path)
+            p = createPath(path, self.scale)
             SVGElement(
                 self.celement, 'path',
                 'd="%s" fill="%s" stroke="none" fill-opacity="%.3g"' % (
@@ -485,9 +479,10 @@ class SVGPaintEngine(qt4.QPaintEngine):
         paths = []
         for line in lines:
             path = 'M%s,%sl%s,%s' % (
-                fltStr(line.x1()*scale), fltStr(line.y1()*scale),
-                fltStr((line.x2()-line.x1())*scale),
-                fltStr((line.y2()-line.y1())*scale))
+                fltStr(line.x1()*self.scale),
+                fltStr(line.y1()*self.scale),
+                fltStr((line.x2()-line.x1())*self.scale),
+                fltStr((line.y2()-line.y1())*self.scale))
             paths.append(path)
         SVGElement(self.celement, 'path', 'd="%s"' % ''.join(paths))
 
@@ -495,15 +490,15 @@ class SVGPaintEngine(qt4.QPaintEngine):
         """Draw polygon on output."""
         pts = []
         for p in points:
-            pts.append( '%s,%s' % (fltStr(p.x()*scale), fltStr(p.y()*scale)) )
+            pts.append( '%s,%s' % (fltStr(p.x()*self.scale), fltStr(p.y()*self.scale)) )
 
-        if mode == qt4.QPaintEngine.PolylineMode:
+        if mode == qt.QPaintEngine.PolylineMode:
             SVGElement(self.celement, 'polyline',
                        'fill="none" points="%s"' % ' '.join(pts))
 
         else:
             attrb = 'points="%s"' % ' '.join(pts)
-            if mode == qt4.Qt.WindingFill:
+            if mode == qt.Qt.WindingFill:
                 attrb += ' fill-rule="nonzero"'
             SVGElement(self.celement, 'polygon', attrb)
 
@@ -511,15 +506,15 @@ class SVGPaintEngine(qt4.QPaintEngine):
         """Draw an ellipse to the svg file."""
         SVGElement(self.celement, 'ellipse',
                    'cx="%s" cy="%s" rx="%s" ry="%s"' %
-                   (fltStr(rect.center().x()*scale),
-                    fltStr(rect.center().y()*scale),
-                    fltStr(rect.width()*0.5*scale),
-                    fltStr(rect.height()*0.5*scale)))
+                   (fltStr(rect.center().x()*self.scale),
+                    fltStr(rect.center().y()*self.scale),
+                    fltStr(rect.width()*0.5*self.scale),
+                    fltStr(rect.height()*0.5*self.scale)))
 
     def drawPoints(self, points):
         """Draw points."""
         for pt in points:
-            x, y = fltStr(pt.x()*scale), fltStr(pt.y()*scale)
+            x, y = fltStr(pt.x()*self.scale), fltStr(pt.y()*self.scale)
             SVGElement(self.celement, 'line',
                        ('x1="%s" y1="%s" x2="%s" y2="%s" '
                         'stroke-linecap="round"') % (x, y, x, y))
@@ -536,15 +531,15 @@ class SVGPaintEngine(qt4.QPaintEngine):
         """
 
         # convert pixmap to textual data
-        data = qt4.QByteArray()
-        buf = qt4.QBuffer(data)
-        buf.open(qt4.QBuffer.ReadWrite)
+        data = qt.QByteArray()
+        buf = qt.QBuffer(data)
+        buf.open(qt.QBuffer.ReadWrite)
         pixmap.save(buf, self.imageformat.upper(), 0)
         buf.close()
 
-        attrb = [ 'x="%s" y="%s" ' % (fltStr(r.x()*scale), fltStr(r.y()*scale)),
-                  'width="%s" ' % fltStr(r.width()*scale),
-                  'height="%s" ' % fltStr(r.height()*scale),
+        attrb = [ 'x="%s" y="%s" ' % (fltStr(r.x()*self.scale), fltStr(r.y()*self.scale)),
+                  'width="%s" ' % fltStr(r.width()*self.scale),
+                  'height="%s" ' % fltStr(r.height()*self.scale),
                   'xlink:href="data:image/%s;base64,' % self.imageformat,
                   cbytes(data.toBase64()).decode('ascii'),
                   '" preserveAspectRatio="none"' ]
@@ -552,17 +547,24 @@ class SVGPaintEngine(qt4.QPaintEngine):
 
     def type(self):
         """A random number for the engine."""
-        return qt4.QPaintEngine.User + 11
+        return qt.QPaintEngine.User + 11
 
-class SVGPaintDevice(qt4.QPaintDevice):
-    """Paint device for SVG paint engine."""
+class SVGPaintDevice(qt.QPaintDevice):
+    """Paint device for SVG paint engine.
+
+    dpi is the real output DPI (unscaled)
+    scale is a scaling value to apply to outputted values
+    """
 
     def __init__(self, fileobj, width_in, height_in,
-                 writetextastext=False):
-        qt4.QPaintDevice.__init__(self)
-        self.engine = SVGPaintEngine(width_in, height_in,
-                                     writetextastext=writetextastext)
+                 writetextastext=False, dpi=90, scale=0.1):
+        qt.QPaintDevice.__init__(self)
         self.fileobj = fileobj
+        self.width = width_in
+        self.height = height_in
+        self.scale = scale
+        self.sdpi = dpi/scale
+        self.engine = SVGPaintEngine(writetextastext=writetextastext)
 
     def paintEngine(self):
         return self.engine
@@ -570,33 +572,33 @@ class SVGPaintDevice(qt4.QPaintDevice):
     def metric(self, m):
         """Return the metrics of the painter."""
 
-        if m == qt4.QPaintDevice.PdmWidth:
-            return int(self.engine.width * dpi)
-        elif m == qt4.QPaintDevice.PdmHeight:
-            return int(self.engine.height * dpi)
-        elif m == qt4.QPaintDevice.PdmWidthMM:
-            return int(self.engine.width * inch_mm)
-        elif m == qt4.QPaintDevice.PdmHeightMM:
-            return int(self.engine.height * inch_mm)
-        elif m == qt4.QPaintDevice.PdmNumColors:
+        if m == qt.QPaintDevice.PdmWidth:
+            return int(self.width*self.sdpi)
+        elif m == qt.QPaintDevice.PdmHeight:
+            return int(self.height*self.sdpi)
+        elif m == qt.QPaintDevice.PdmWidthMM:
+            return int(self.engine.width*inch_mm)
+        elif m == qt.QPaintDevice.PdmHeightMM:
+            return int(self.engine.height*inch_mm)
+        elif m == qt.QPaintDevice.PdmNumColors:
             return 2147483647
-        elif m == qt4.QPaintDevice.PdmDepth:
+        elif m == qt.QPaintDevice.PdmDepth:
             return 24
-        elif m == qt4.QPaintDevice.PdmDpiX:
-            return int(dpi)
-        elif m == qt4.QPaintDevice.PdmDpiY:
-            return int(dpi)
-        elif m == qt4.QPaintDevice.PdmPhysicalDpiX:
-            return int(dpi)
-        elif m == qt4.QPaintDevice.PdmPhysicalDpiY:
-            return int(dpi)
-        elif m == qt4.QPaintDevice.PdmDevicePixelRatio:
+        elif m == qt.QPaintDevice.PdmDpiX:
+            return int(self.sdpi)
+        elif m == qt.QPaintDevice.PdmDpiY:
+            return int(self.sdpi)
+        elif m == qt.QPaintDevice.PdmPhysicalDpiX:
+            return int(self.sdpi)
+        elif m == qt.QPaintDevice.PdmPhysicalDpiY:
+            return int(self.sdpi)
+        elif m == qt.QPaintDevice.PdmDevicePixelRatio:
             return 1
 
         # Qt >= 5.6
-        elif m == getattr(qt4.QPaintDevice, 'PdmDevicePixelRatioScaled', -1):
+        elif m == getattr(qt.QPaintDevice, 'PdmDevicePixelRatioScaled', -1):
             return 1
 
         else:
             # fall back
-            return qt4.QPaintDevice.metric(self, m)
+            return qt.QPaintDevice.metric(self, m)
